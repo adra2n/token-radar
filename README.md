@@ -44,8 +44,14 @@ The run writes `board.json` (the ranked board), `data.js` (the page's dataset), 
    Seasoning runs from 0.65 at day zero to 1.0 at four years with no token, at 365 days when the
    record has no start date.
 
+   Every row also carries the band: the same arithmetic at the 25th and 75th percentile of that
+   category's peer multiples, plus a confidence mark that falls as the peer set gets thinner or more
+   scattered. A category with one or two live peers has no spread of its own and inherits the
+   market's shape around its own estimate.
+
 3. **What to do about it.** Every row carries a six-step farm plan derived from its own category,
-   chains, TVL and age, each step with its cost and its time.
+   chains, TVL and age, each step with its cost and its time, under a summary of the capital, the
+   weekly cost, the setup time, the horizon and the time it takes each week.
 
 ## The dashboard
 
@@ -55,8 +61,10 @@ each row's own figures, the category multiples, and the set-aside list. Views ar
 (`#p/<slug>`, `#cat=…&sort=…&wl=1`) so every screenshot is reproducible from a URL:
 
 - `screenshots/1-board.png` — the ranked board
-- `screenshots/2-detail.png` — one protocol's arithmetic and farm plan (`#p/steakhouse-financial`)
-- `screenshots/3-filtered.png` — the same board filtered to one category (`#cat=Risk+Curators`)
+- `screenshots/2-detail.png` — one protocol's arithmetic, band and farm plan (`#p/gauntlet`)
+- `screenshots/3-filtered.png` — the same board filtered to one category, sorted by TVL
+  (`#cat=Risk+Curators&sort=tvl`)
+- `screenshots/4-model.png` — the method, the category multiples and the set-aside list (`#model`)
 
 ## Layout
 
@@ -70,7 +78,7 @@ vendor/makefun-board.ts  make.fun's dossier library, vendored unchanged
 
 ## Model
 
-`comps-1`. Deterministic: the same snapshot always produces the same board, byte for byte. The
+`comps-2`. Deterministic: the same snapshot always produces the same board, byte for byte. The
 constants live in `lib/model.ts` and are stated on the page. An implied value is this radar's own
 estimate of what a token could be worth — not a forecast that one will be issued, and not advice to
 buy anything. Farming a protocol risks the capital you put in it.

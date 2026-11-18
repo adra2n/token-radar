@@ -206,14 +206,34 @@ input[type="search"]:focus, select:focus, .toggle:focus-within {
 .up { color: var(--mint); }
 .down { color: var(--red); }
 
-.implied { font-weight: 600; color: var(--text); }
+.implied { display: block; font-weight: 600; color: var(--text); }
+
 .mult { color: var(--dim); font-size: 12px; }
 
 .barcol { width: auto; }
-.bar { display: block; height: 5px; border-radius: 3px; background: #1a2431; overflow: hidden; }
-.bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--mint-dim), var(--mint)); }
+.band { position: relative; display: block; height: 14px; }
+.band > i { position: absolute; top: 50%; transform: translateY(-50%); border-radius: 3px; }
+.band .lo { height: 5px; background: rgba(47, 224, 160, 0.22); }
+.band .pt { width: 2px; height: 12px; margin-left: -1px; background: var(--mint); }
 
 .empty { padding: 26px 18px; color: var(--dim); }
+
+.conf {
+  font-size: 10.5px; text-transform: none; letter-spacing: 0;
+  border-radius: 999px; padding: 1px 7px; border: 1px solid var(--line);
+}
+.conf.high { color: var(--mint); border-color: rgba(47, 224, 160, 0.35); }
+.conf.medium { color: var(--amber); border-color: rgba(255, 181, 69, 0.3); }
+.conf.low { color: var(--faint); }
+
+.planstrip {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;
+  margin: 0 0 16px; padding: 10px 12px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+}
+.plan { margin: 0; }
+.plan dt { color: var(--faint); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.08em; }
+.plan dd { margin: 3px 0 0; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* ---------------------------------------------------------------- detail */
 
@@ -247,7 +267,7 @@ input[type="search"]:focus, select:focus, .toggle:focus-within {
 
 .equation { display: grid; gap: 6px; margin: 0 0 14px; }
 .eqline {
-  display: grid; grid-template-columns: 132px 1fr auto; gap: 10px; align-items: baseline;
+  display: grid; grid-template-columns: 176px 1fr auto; gap: 10px; align-items: baseline;
   padding: 6px 0; border-bottom: 1px dashed var(--line-soft); font-size: 12.5px;
 }
 .eqline:last-child { border-bottom: 0; }

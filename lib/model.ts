@@ -80,7 +80,7 @@ export const MODEL: ModelConstants = {
   multiple_cap: 1.5,
 };
 
-export const MODEL_VERSION = 'comps-1';
+export const MODEL_VERSION = 'comps-2';
 
 /** A farm step: the action, what it costs, and how long it takes. */
 export interface FarmStep {
@@ -101,8 +101,13 @@ export interface BoardRow {
   age_days: number | null;
   token_status: 'records-no-token';
   implied_value_usd: number;
+  implied_low_usd: number;
+  implied_high_usd: number;
+  confidence: 'high' | 'medium' | 'low';
   model: {
     category_multiple: number;
+    category_low_multiple: number;
+    category_high_multiple: number;
     peers: number;
     peer_median_multiple: number;
     growth_pct: number;
@@ -118,6 +123,8 @@ export interface CategoryStat {
   name: string;
   peers: number;
   median_multiple: number;
+  low_multiple: number;
+  high_multiple: number;
   multiple: number;
   rows: number;
 }
@@ -174,10 +181,22 @@ export interface RadarRow {
   age_days: number | null;
   watchlist: boolean;
   implied_value_usd: number;
+  implied_low_usd: number;
+  implied_high_usd: number;
+  confidence: 'high' | 'medium' | 'low';
   multiple: number;
+  low_multiple: number;
+  high_multiple: number;
   peers: number;
   growth_multiplier: number;
   season_multiplier: number;
+  plan: {
+    capital_usd: number;
+    weekly_cost_usd: number;
+    setup_minutes: number;
+    weekly_minutes: number;
+    horizon_days: number;
+  };
   farm: FarmStep[];
 }
 
@@ -252,6 +271,24 @@ function median(values: number[]): number {
   return s.length % 2 === 1 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
 }
 
+/** A quantile by linear interpolation: the spread of a category's comparables, not just its middle. */
+function quantile(values: number[], q: number): number {
+  const s = [...values].sort((a, b) => a - b);
+  if (s.length === 1) return s[0]!;
+  const at = (s.length - 1) * q;
+  const lo = Math.floor(at);
+  const hi = Math.ceil(at);
+  return s[lo]! + (s[hi]! - s[lo]!) * (at - lo);
+}
+
+/** How much a row's estimate leans on a thin or scattered comparable set. */
+export function confidenceOf(peers: number, lowMultiple: number, highMultiple: number): 'high' | 'medium' | 'low' {
+  const spread = highMultiple / lowMultiple;
+  if (peers >= 8 && spread <= 3) return 'high';
+  if (peers >= 3 && spread <= 8) return 'medium';
+  return 'low';
+}
+
 /** The multiple one live protocol trades at: its market cap over its TVL, winsorised. */
 function liveMultiple(p: SnapshotProtocol, model: ModelConstants): number {
   return clamp(p.mcap_usd! / p.tvl_usd, model.ratio_floor, model.ratio_cap);
@@ -272,15 +309,30 @@ export function categoryStats(snapshot: Snapshot, model: ModelConstants = MODEL)
     list.push(liveMultiple(p, model));
     ratios.set(key, list);
   }
+  const all = live.map((p) => liveMultiple(p, model));
+  const marketLow = quantile(all, 0.25);
+  const marketHigh = quantile(all, 0.75);
   const stats = new Map<string, CategoryStat>();
   for (const [name, list] of ratios) {
     const med = median(list);
-    const shrunk = (list.length * med + model.shrink_peers * market) / (list.length + model.shrink_peers);
+    const k = model.shrink_peers;
+    const shrink = (x: number): number => clamp((list.length * x + k * market) / (list.length + k), model.multiple_floor, model.multiple_cap);
+    const point = shrink(med);
+    // A category with one or two comparables has no spread of its own, so it inherits the market's
+    // shape around its own estimate rather than pretending to a range narrower than the market.
+    const low = list.length >= 3
+      ? shrink(quantile(list, 0.25))
+      : clamp(point * (marketLow / market), model.multiple_floor, model.multiple_cap);
+    const high = list.length >= 3
+      ? shrink(quantile(list, 0.75))
+      : clamp(point * (marketHigh / market), model.multiple_floor, model.multiple_cap);
     stats.set(name, {
       name,
       peers: list.length,
       median_multiple: round4(med),
-      multiple: round4(clamp(shrunk, model.multiple_floor, model.multiple_cap)),
+      low_multiple: round4(Math.min(low, point)),
+      high_multiple: round4(Math.max(high, point * 1.05)),
+      multiple: round4(point),
       rows: 0,
     });
   }
@@ -288,6 +340,8 @@ export function categoryStats(snapshot: Snapshot, model: ModelConstants = MODEL)
     name: 'all live protocols',
     peers: live.length,
     median_multiple: round4(market),
+    low_multiple: round4(clamp(marketLow, model.multiple_floor, model.multiple_cap)),
+    high_multiple: round4(clamp(marketHigh, model.multiple_floor, model.multiple_cap)),
     multiple: round4(clamp(market, model.multiple_floor, model.multiple_cap)),
     rows: 0,
   });
@@ -299,7 +353,12 @@ const round4 = (n: number): number => Math.round(n * 1e4) / 1e4;
 /** The three multipliers and the implied value one protocol gets under `model`. */
 export function impliedValue(p: SnapshotProtocol, asOf: string, model: ModelConstants, stats: Map<string, CategoryStat>): {
   implied: number;
+  low: number;
+  high: number;
+  confidence: 'high' | 'medium' | 'low';
   categoryMultiple: number;
+  lowMultiple: number;
+  highMultiple: number;
   peers: number;
   peerMedian: number;
   growthPct: number;
@@ -313,10 +372,16 @@ export function impliedValue(p: SnapshotProtocol, asOf: string, model: ModelCons
   const growthMult = 1 + (growthPct / 100) * model.growth_weight;
   const ageForModel = age ?? model.unknown_age_days;
   const seasonMult = model.season_floor + (clamp(ageForModel, 0, model.season_days) / model.season_days) * model.season_range;
-  const implied = Math.max(1, Math.round(p.tvl_usd * stat.multiple * growthMult * seasonMult));
+  const scale = p.tvl_usd * growthMult * seasonMult;
+  const implied = Math.max(1, Math.round(scale * stat.multiple));
   return {
     implied,
+    low: Math.max(1, Math.round(scale * stat.low_multiple)),
+    high: Math.max(1, Math.round(scale * stat.high_multiple)),
+    confidence: confidenceOf(stat.peers, stat.low_multiple, stat.high_multiple),
     categoryMultiple: stat.multiple,
+    lowMultiple: stat.low_multiple,
+    highMultiple: stat.high_multiple,
     peers: stat.peers,
     peerMedian: stat.median_multiple,
     growthPct,
@@ -495,6 +560,25 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   ];
 }
 
+/** The plan at a glance: what it costs up front, what it costs to keep, and how long it runs. */
+export function planSummary(p: SnapshotProtocol, age: number | null): {
+  capital_usd: number;
+  weekly_cost_usd: number;
+  setup_minutes: number;
+  weekly_minutes: number;
+  horizon_days: number;
+} {
+  const chain = chainOf(p);
+  const gas = /ethereum|arbitrum|optimism|base|polygon|bsc|avalanche/i.test(chain) ? 4 : 1;
+  return {
+    capital_usd: capitalFor(p),
+    weekly_cost_usd: 2 + gas,
+    setup_minutes: 45,
+    weekly_minutes: 10,
+    horizon_days: holdDaysFor(age),
+  };
+}
+
 /** The protocols the board ranks, strongest first, with ranks 1..n. */
 export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): BoardRow[] {
   const stats = categoryStats(snapshot, model);
@@ -512,8 +596,13 @@ export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): B
     age_days: s.age,
     token_status: 'records-no-token',
     implied_value_usd: s.implied,
+    implied_low_usd: s.low,
+    implied_high_usd: s.high,
+    confidence: s.confidence,
     model: {
       category_multiple: s.categoryMultiple,
+      category_low_multiple: s.lowMultiple,
+      category_high_multiple: s.highMultiple,
       peers: s.peers,
       peer_median_multiple: s.peerMedian,
       growth_pct: round4(s.growthPct),
@@ -591,10 +680,16 @@ export function buildRadar(snapshot: Snapshot, model: ModelConstants = MODEL): {
       age_days: row.age_days,
       watchlist: watchlist.has(row.slug),
       implied_value_usd: row.implied_value_usd,
+      implied_low_usd: row.implied_low_usd,
+      implied_high_usd: row.implied_high_usd,
+      confidence: row.confidence,
       multiple: row.model.category_multiple,
+      low_multiple: row.model.category_low_multiple,
+      high_multiple: row.model.category_high_multiple,
       peers: row.model.peers,
       growth_multiplier: row.model.growth_multiplier,
       season_multiplier: row.model.season_multiplier,
+      plan: planSummary(snapshot.protocols.find((p) => p.slug === row.slug)!, row.age_days),
       farm: farmSteps(snapshot.protocols.find((p) => p.slug === row.slug)!, row.age_days),
     })),
     categories,
