@@ -3,12 +3,106 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Token Radar: pre-token protocols ranked by implied value</title>
+<title>Token Radar · pre-token protocols ranked by implied launch value</title>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
 <a class="skip" href="#board">Skip to the board</a>
-<main id="board" tabindex="-1" aria-busy="true"></main>
+
+<header class="top">
+  <div class="brand"><span class="pulse"></span>Token Radar<span class="ver" id="ver">comps-1</span></div>
+  <div class="meta" id="meta"></div>
+</header>
+
+<main>
+  <section class="hero">
+    <h1>Every protocol that records no token, ranked by what its launch would be worth.</h1>
+    <p class="lede" id="lede"></p>
+    <div class="kpis" id="kpis"></div>
+  </section>
+
+  <section class="panel board" id="board" aria-label="Ranked board">
+    <div class="controls">
+      <label class="field grow"><span>Search</span><input id="q" type="search" autocomplete="off" placeholder="protocol, slug or category"></label>
+      <label class="field"><span>Category</span><select id="cat"></select></label>
+      <label class="field"><span>Chain</span><select id="chain"></select></label>
+      <label class="field"><span>Sort</span><select id="sort">
+        <option value="rank">Rank</option>
+        <option value="tvl">TVL</option>
+        <option value="change">7-day change</option>
+        <option value="age">Age</option>
+        <option value="multiple">Multiple</option>
+        <option value="name">Name</option>
+      </select></label>
+      <label class="toggle"><input type="checkbox" id="wl"><span>Watchlist only</span></label>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="scroll">
+      <table class="grid">
+        <colgroup>
+          <col class="c-rank"><col class="c-name"><col class="c-cat"><col class="c-chain">
+          <col class="c-tvl"><col class="c-pct"><col class="c-age"><col class="c-mult"><col class="c-implied"><col class="c-bar">
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="num">#</th>
+            <th>Protocol</th>
+            <th>Category</th>
+            <th>Chain</th>
+            <th class="num">TVL</th>
+            <th class="num">7d</th>
+            <th class="num">Age</th>
+            <th class="num">×TVL</th>
+            <th class="num">Implied value</th>
+            <th class="barcol"><span class="sr">Scale</span></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p class="empty" id="empty" hidden>No protocol matches those filters.</p>
+  </section>
+
+  <section class="detail" id="detail" hidden aria-live="polite"></section>
+
+  <section class="panel method" id="method">
+    <div class="panelhead">
+      <h2>How the value is computed</h2>
+      <p class="hint">Every row is the same four factors, and the page recomputes them from the row's own figures.</p>
+    </div>
+    <div class="formula" id="formula"></div>
+    <div class="methodcols">
+      <div>
+        <h3>The three that move it</h3>
+        <dl class="factors" id="factors"></dl>
+      </div>
+      <div>
+        <h3>Category multiples from live comparables</h3>
+        <table class="grid small">
+          <thead><tr><th>Category</th><th class="num">Peers</th><th class="num">Median</th><th class="num">Used</th><th class="num">Ranked</th></tr></thead>
+          <tbody id="cats"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel aside" id="aside">
+    <div class="panelhead">
+      <h2>Recording no token is not the same as still to come</h2>
+      <p class="hint" id="asidehint"></p>
+    </div>
+    <table class="grid small">
+      <thead><tr><th>Protocol</th><th>Category</th><th class="num">TVL</th><th>Why it is not a launch</th></tr></thead>
+      <tbody id="asideRows"></tbody>
+    </table>
+  </section>
+</main>
+
+<footer>
+  <p id="foot"></p>
+  <p class="fine">An implied value is this radar's own estimate of what a token could be worth, not a forecast that one will be issued and not advice to buy anything. Farming a protocol risks the capital you put in it.</p>
+</footer>
+
 <script src="../data.js"></script>
 <script src="app.js"></script>
 </body>
